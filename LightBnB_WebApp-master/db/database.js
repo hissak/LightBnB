@@ -121,10 +121,41 @@ LIMIT
  * @param {*} limit The number of results to return.
  * @return {Promise<[{}]>}  A promise to the properties.
  */
-
+// This code filters directly in properties if city is not entered because where clause in not included.
 const getAllProperties = (options, limit = 10) => {
-  const queryString = `select * from properties limit $1`;
-  const values = [limit];
+  let values = [];
+  let queryString = `SELECT
+  properties.*,
+  avg(property_reviews.rating) AS average_rating
+FROM
+  properties
+  JOIN property_reviews ON properties.id = property_id`;
+  if (options.city) {
+    values.push(`%${options.city}%`);
+    queryString += ` WHERE UPPER(city) LIKE UPPER($${values.length})`;
+  }
+  if (options.owner_id) {
+    values.push(`${options.owner_id}`);
+    queryString += ` AND owner_id = $${values.length}`;
+  }
+  if (options.minimum_price_per_night) {
+    values.push(`${options.minimum_price_per_night}`);
+    queryString += ` AND cost_per_night/100 >= $${values.length}`;
+  }
+  if (options.maximum_price_per_night) {
+    values.push(`${options.maximum_price_per_night}`);
+    queryString += ` AND cost_per_night/100 <= $${values.length}`;
+  }
+  queryString += ` 
+  GROUP BY properties.id
+  `;
+  if (options.minimum_rating) {
+    values.push(`${options.minimum_rating}`);
+    queryString += ` HAVING avg(property_reviews.rating) >= $${values.length}`;
+  }
+  values.push(limit);
+  queryString += ` ORDER BY cost_per_night LIMIT $${values.length}`;
+  console.log(queryString, values);
   return pool
     .query(
       queryString,
